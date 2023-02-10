@@ -5,70 +5,103 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
-const (
-  inpMsg = "Enter a command and data: "
-  addMsg = "[OK] The note was successfully created"
-  delMsg = "[OK] All notes were successfully deleted"
-  fullMsg, listFmt = "[Error] Notepad is full", "[Info] %d: %s"
-  errCmd, errVal = "!command unknown", "!content empty"
-  exitMsg, exitCmd = "[Info] Bye!", "exit"
-  arrLimit = 5
-)
-
-func newSlice() []string {
-  return make([]string, 0, arrLimit)
+type notepad struct {
+	Notes                           []string
+	Response                        string
+	Size                            int
+	inpMsg, addMsg, delMsg, listFmt string
+	errFul, errMpt, errCmd, errVal  string
+	exitMsg, exitCmd                string
 }
 
-func add(notes []string, content string) ([]string, string) {
-  if content == "" {return notes, errVal}
-  if len(notes) == arrLimit { return notes, fullMsg }
-  notes = append(notes, content); return notes, addMsg
+func newPad() (*notepad, *bufio.Scanner) {
+	scanner := bufio.NewScanner(os.Stdin)
+	fmt.Print("Enter the maximum number of notes: ")
+	scanner.Scan()
+	size, _ := strconv.Atoi(scanner.Text())
+
+	myPad := notepad{
+		inpMsg:  "Enter a command and data: ",
+		addMsg:  "[OK] The note was successfully created",
+		delMsg:  "[OK] All notes were successfully deleted",
+		listFmt: "[Info] %d: %s",
+		errFul:  "[Error] Notepad is full",
+		errMpt:  "[Info] Notepad is empty",
+		errCmd:  "[Error] Unknown command",
+		errVal:  "[Error] Missing note argument",
+		exitMsg: "[Info] Bye!", exitCmd: "exit",
+		Notes: newSlice(size), Size: size,
+	}
+	return &myPad, scanner
 }
 
-func list(notes []string) string {
-  var listed = newSlice()
-  for i, note := range notes { 
-    listed = append(listed, fmt.Sprintf(listFmt, i + 1, note))
-  }; return strings.Join(listed, "\n")
+func newSlice(arrLimit int) []string {
+	return make([]string, 0, arrLimit)
 }
 
-func clear(notes []string) ([]string, string) {
-  notes = nil; return notes, delMsg
+func add(pad *notepad, newContent string) ([]string, string) {
+	if len(pad.Notes) == pad.Size {
+		return pad.Notes, pad.errFul
+	}
+	if newContent == "" {
+		return pad.Notes, pad.errVal
+	}
+	pad.Notes = append(pad.Notes, newContent)
+	return pad.Notes, pad.addMsg
+}
+
+func list(pad *notepad, listed []string) string {
+	if len(pad.Notes) == 0 {
+		return pad.errMpt
+	}
+	for i, note := range pad.Notes {
+		listed = append(listed, fmt.Sprintf(pad.listFmt, i+1, note))
+	}
+	return strings.Join(listed, "\n")
+}
+
+func clear(pad *notepad) ([]string, string) {
+	pad.Notes = nil
+	return pad.Notes, pad.delMsg
+}
+
+func run(pad *notepad, scanner *bufio.Scanner) {
+	var command string
+mainLoop:
+	for {
+		var content string
+		fmt.Printf("%s", pad.inpMsg)
+		scanner.Scan()
+
+		command, content = func() (string, string) {
+			entry := regexp.MustCompile(`\s+`).Split(scanner.Text(), 2)
+			entry = append(entry, content)
+			return entry[0], entry[1]
+		}()
+
+		switch command {
+		case "create":
+			pad.Notes, pad.Response = add(pad, content)
+		case "list":
+			pad.Response = list(pad, newSlice(pad.Size))
+		case "clear":
+			pad.Notes, pad.Response = clear(pad)
+		case pad.exitCmd:
+			break mainLoop
+		default:
+			fmt.Print(pad.errCmd)
+		}
+		fmt.Println(pad.Response)
+	}
+
+	fmt.Printf(pad.exitMsg)
 }
 
 func main() {
-    var command string
-    var notes = newSlice()
-    scanner := bufio.NewScanner(os.Stdin)
-
-    mainLoop:
-      for {
-        var content, response string
-        fmt.Printf("%s", inpMsg)
-        scanner.Scan()
-      
-        command, content = func() (string, string) {
-          entry := regexp.MustCompile(`\s+`).Split(scanner.Text(), 2)
-          entry = append(entry, content)
-          return entry[0], entry[1]
-        }()
-        
-        switch command {
-          case "create":
-            notes, response = add(notes, content)
-          case "list":
-            response = list(notes)
-          case "clear":
-            notes, response = clear(notes)
-          case exitCmd:
-            break mainLoop
-          default:
-            fmt.Print(errCmd)
-        }
-        fmt.Println(response)
-      }
-  fmt.Printf(exitMsg)
+	lilPad, scanner := newPad()
+	run(lilPad, scanner)
 }
